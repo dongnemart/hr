@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>인사 기사 작성기</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <h1>인사 기사 작성기</h1>
+    
+    <div class="container">
+        <div class="box">
+            <div class="box-header">
+                <h2 class="box-title">원본 자료</h2>
+                <span id="char-count">0/3000</span>
+            </div>
+            <textarea id="input-data" placeholder="여기에 자료를 입력하세요..." maxlength="3000"></textarea>
+        </div>
+        
+        <div class="box">
+            <div class="box-header">
+                <h2 class="box-title">변환 결과</h2>
+            </div>
+            <div id="result" style="flex-grow: 1; overflow: auto;"></div>
+        </div>
+    </div>
+    
+    <div class="controls">
+        <button class="convert-btn" id="convert-btn">변환</button>
+        <button class="convert-btn" id="copy-btn">복사</button>
+    </div>
+    
+    <div class="api-settings">
+        <div class="api-toggle">
+            <h3>API 설정</h3>
+            <span id="toggle-icon">▼</span>
+        </div>
+        <div class="api-form" id="api-form">
+            <div class="form-group">
+                <label for="api-provider">AI 제공자</label>
+                <select id="api-provider">
+                    <option value="gemini">Google Gemini</option>
+                    <option value="perplexity">Perplexity</option>
+                </select>
+            </div>
+            
+            <!-- Gemini 설정 -->
+            <div id="gemini-settings" class="model-settings active">
+                <div class="form-group">
+                    <label for="gemini-model">Gemini 모델</label>
+                    <select id="gemini-model">
+                        <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                        <option value="gemini-1.5-pro" selected>Gemini 1.5 Pro</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="gemini-api-key">Gemini API 키 (선택사항)</label>
+                    <input type="text" id="gemini-api-key" placeholder="기본 API 키가 설정되어 있습니다. 필요한 경우 여기에 자신의 API 키를 입력하세요.">
+                </div>
+            </div>
+            
+            <!-- Perplexity 설정 -->
+            <div id="perplexity-settings" class="model-settings">
+                <div class="form-group">
+                    <label for="perplexity-model">Perplexity 모델</label>
+                    <select id="perplexity-model">
+                        <option value="llama-3-sonar-large-32k-online">Llama-3-Sonar-Large-32k</option>
+                        <option value="sonar-small-online">Sonar-Small-Online</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="perplexity-api-key">Perplexity API 키</label>
+                    <input type="text" id="perplexity-api-key" placeholder="Perplexity API 키를 입력하세요">
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="api-url">API URL (선택사항)</label>
+                <input type="text" id="api-url" placeholder="기본 API URL이 사용됩니다">
+            </div>
+        </div>
+    </div>
+    
+    <div class="loading" id="loading">
+        <div class="loading-spinner"></div>
+        <p>처리 중...</p>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const convertBtn = document.getElementById('convert-btn');
+            const copyBtn = document.getElementById('copy-btn');
+            const inputData = document.getElementById('input-data');
+            const apiProvider = document.getElementById('api-provider');
+            const geminiSettings = document.getElementById('gemini-settings');
+            const perplexitySettings = document.getElementById('perplexity-settings');
+            const geminiApiKeyInput = document.getElementById('gemini-api-key');
+            const perplexityApiKeyInput = document.getElementById('perplexity-api-key');
+            const geminiModelSelect = document.getElementById('gemini-model');
+            const perplexityModelSelect = document.getElementById('perplexity-model');
+            const apiUrlInput = document.getElementById('api-url');
+            const apiToggle = document.querySelector('.api-toggle');
+            const apiForm = document.getElementById('api-form');
+            const toggleIcon = document.getElementById('toggle-icon');
+            const loadingDiv = document.getElementById('loading');
+            const resultDiv = document.getElementById('result');
+            const inputDataTextarea = document.getElementById('input-data');
+            const charCountSpan = document.getElementById('char-count');
+            
+            // 글자수 카운터 업데이트 함수
+            function updateCharCount() {
+                const currentLength = inputDataTextarea.value.length;
+                charCountSpan.textContent = `${currentLength}/3000`;
+                
+                // 글자수가 제한에 가까워지면 색상 변경
+                if (currentLength >= 2700) {
+                    charCountSpan.style.color = '#ff4500';
+                } else {
+                    charCountSpan.style.color = '#666';
+                }
+            }
+            
+            // 입력 이벤트에 글자수 카운터 업데이트 연결
+            inputDataTextarea.addEventListener('input', updateCharCount);
+            
+            // 초기 글자수 표시
+            updateCharCount();
+            
+            // API 키 난독화 (Base64 인코딩)
+            const _0x5a7e=['QUl6YVN5Q3ZqeEJRWUtVZ2NfSDg4VkpxWEc4c2dEbU90X0VzTExJ'];
+            const getDefaultApiKey = function() {
+                return atob(_0x5a7e[0]);
+            };
+            
+            // API 제공자 변경 이벤트
+            apiProvider.addEventListener('change', function() {
+                if (this.value === 'gemini') {
+                    geminiSettings.classList.add('active');
+                    perplexitySettings.classList.remove('active');
+                } else if (this.value === 'perplexity') {
+                    geminiSettings.classList.remove('active');
+                    perplexitySettings.classList.add('active');
+                }
+            });
+            
+            // API 설정 토글
+            apiToggle.addEventListener('click', function() {
+                apiForm.classList.toggle('active');
+                toggleIcon.textContent = apiForm.classList.contains('active') ? '▲' : '▼';
+            });
+            
+            // 로컬 스토리지에서 API 키 불러오기
+            const savedGeminiApiKey = localStorage.getItem('gemini_api_key');
+            if (savedGeminiApiKey) {
+                geminiApiKeyInput.value = savedGeminiApiKey;
+            }
+            
+            const savedPerplexityApiKey = localStorage.getItem('perplexity_api_key');
+            if (savedPerplexityApiKey) {
+                perplexityApiKeyInput.value = savedPerplexityApiKey;
+            }
+            
+            // 프롬프트 템플릿
+            const promptTemplate = `
+#목표# 
+직책과 이름으로 구성된 자료를 특정 양식으로 변환해 정리
+
+#경고#
+고려사항을 반드시 반영하고 금지사항 반드시 준수
+
+#배경#
+- 직책과 이름으로 구성된 자료가 있습니다. 해당 자료는 :
+  주로 '구분기호(특수문자) 직책 이름', '직책 이름', '이름 직책' 등의 형식으로 구성됨.
+  특정 직책을 포괄하는 직급이 있을 경우 앞에 표기해 그룹으로 묶는 경우도 있음. 
+  다만 각 자료가 '유사하지만 동일하지 않은 양식'으로 구성.
+    예 : 이름 내 띄어쓰기를 삽입하는 경우(홍길동 → 홍 길 동), 이름 뒤에 직책이 제시되는 경우 등.
+  직책은 두 단어 이상일 수 있음. 각 단어들은 띄어쓰기로 구분됨.
+    
+#요구#
+ - 우선 주어진 자료를 보고 이름과 직책을 구분합니다.
+ - 이를 아래 양식에 맞게 정리해 나열합니다.
+   양식 : ▲ 직책 이름
+ - 특정 직책을 포괄하는 직급이 제시된 경우 아래 양식에 따라 정리해 나열합니다
+   양식 :   
+         ◇ 직급
+         ▲ 직책 이름
+ 
+#고려사항#
+ - 대부분의 경우 이름은 3~4자. 
+ - 직책은 10자 안팎인 경우가 많음.
+ - '전', '前' 또는 '기', '旣'이라고 표시된 직책은 이전 직책으로 무시해도 됨.
+ - '명' 또는 '命'이라고 표시된 직책은 새 직책이니 이를 직책으로 반영.
+ - 새 직책이 확인된 경우 '▲ 새 직책 이름'으로 정리하고, 나머지 정보는 무시.
+ - 발령일자 등의 정보는 무시.
+ - 직급 뒤에선 한 번 줄바꿈할 것.
+ - 모든 줄의 맨 앞에서 4칸 띄우기를 적용할 것.
+   - 직급(◇)이 포함된 줄도 예외 없이 4칸 띄어쓰기를 적용할 것.
+ 
+#금지사항#
+ - 어떤 창의성도 발휘해선 안됨. 자료에 주어지지 않은 내용을 만들어 삽입해선 절대 안됨.
+ - 제시된 양식에 사용된 특수문자를 바꾸지 말 것.
+ - 원자료에 직급으로 그룹핑 돼있지 않은 경우 그룹핑하지 말 것
+ - 정리된 자료 나열 시 줄을 나누지 말 것. 
+   단, 직급(◇) 뒤에는 한 번 줄을 나누고(바꾸고), 같은 직급 내에선 절대 줄바꿈하지 말 것.
+   즉, 같은 직급 내 사람은 한 줄로 입력돼야 함.
+ - 모든 줄이 4칸 띄어쓰기로 시작해야 하며, 들여쓰기 형식이 변형되지 않도록 할 것.
+ - 직책이 두 단어 이상이어도 생략하지 말 것.
+ 
+아래 자료를 위 요구사항에 맞게 정리해주세요:
+
+{inputData}`;
+            
+            // 변환 버튼 클릭 이벤트
+            convertBtn.addEventListener('click', function() {
+                const data = inputData.value;
+                
+                if (!data.trim()) {
+                    alert('자료를 입력해주세요.');
+                    return;
+                }
+                
+                const provider = apiProvider.value;
+                
+                if (provider === 'gemini') {
+                    // Gemini API 키 결정 (사용자 입력 또는 기본값)
+                    let apiKey = geminiApiKeyInput.value.trim();
+                    if (!apiKey) {
+                        apiKey = getDefaultApiKey();
+                    } else {
+                        // 사용자가 입력한 API 키 저장
+                        localStorage.setItem('gemini_api_key', apiKey);
+                    }
+                    
+                    // 프롬프트 생성
+                    const finalPrompt = promptTemplate.replace('{inputData}', data);
+                    
+                    // API 호출
+                    callGeminiAPI(finalPrompt, apiKey, geminiModelSelect.value);
+                } else if (provider === 'perplexity') {
+                    // Perplexity API 키 확인
+                    let apiKey = perplexityApiKeyInput.value.trim();
+                    if (!apiKey) {
+                        alert('Perplexity API 키를 입력해주세요.');
+                        return;
+                    }
+                    
+                    // 사용자가 입력한 API 키 저장
+                    localStorage.setItem('perplexity_api_key', apiKey);
+                    
+                    // 프롬프트 생성
+                    const finalPrompt = promptTemplate.replace('{inputData}', data);
+                    
+                    // API 호출
+                    callPerplexityAPI(finalPrompt, apiKey, perplexityModelSelect.value);
+                }
+            });
+            
+            // 복사 버튼 클릭 이벤트
+            copyBtn.addEventListener('click', function() {
+                const resultText = resultDiv.innerText || resultDiv.textContent;
+                if (!resultText.trim()) {
+                    alert('복사할 결과가 없습니다.');
+                    return;
+                }
+                
+                // 텍스트 영역 생성 및 복사 (클립보드 API가 지원되지 않는 경우를 위한 대체 방법)
+                const textarea = document.createElement('textarea');
+                textarea.value = resultText;
+                textarea.style.position = 'fixed';  // 화면 밖으로 위치시킴
+                textarea.style.opacity = '0';
+                document.body.appendChild(textarea);
+                textarea.select();
+                
+                try {
+                    const successful = document.execCommand('copy');
+                    if (successful) {
+                        // 복사 성공 표시
+                        const originalText = copyBtn.textContent;
+                        const originalWidth = copyBtn.offsetWidth; // 원래 버튼 너비 저장
+                        copyBtn.style.width = originalWidth + 'px'; // 너비 고정
+                        copyBtn.textContent = '복사됨!';
+                        setTimeout(() => {
+                            copyBtn.textContent = originalText;
+                            copyBtn.style.width = ''; // 너비 설정 제거
+                        }, 2000);
+                    } else {
+                        alert('복사에 실패했습니다.');
+                    }
+                } catch (err) {
+                    alert('복사 중 오류가 발생했습니다: ' + err);
+                }
+                
+                document.body.removeChild(textarea);
+            });
+            
+            // Perplexity API 호출 함수
+            function callPerplexityAPI(prompt, apiKey, model) {
+                loadingDiv.style.display = 'flex';
+                resultDiv.innerHTML = '';
+                
+                const apiUrl = apiUrlInput.value.trim() || 'https://api.perplexity.ai/chat/completions';
+                
+                fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`
+                    },
+                    body: JSON.stringify({
+                        model: model,
+                        messages: [
+                            {
+                                role: "user",
+                                content: prompt
+                            }
+                        ],
+                        temperature: 0.2,
+                        max_tokens: 4096
+                    })
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`API 요청 실패: ${response.status} ${response.statusText}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    loadingDiv.style.display = 'none';
+                    
+                    if (data.choices && data.choices.length > 0 && 
+                        data.choices[0].message && data.choices[0].message.content) {
+                        const result = data.choices[0].message.content;
+                        resultDiv.innerHTML = `<pre>${result}</pre>`;
+                    } else {
+                        resultDiv.innerHTML = '<p>응답을 처리하는 중 오류가 발생했습니다.</p>';
+                        console.error('Unexpected API response structure:', data);
+                    }
+                })
+                .catch(error => {
+                    loadingDiv.style.display = 'none';
+                    resultDiv.innerHTML = `<p>오류가 발생했습니다: ${error.message}</p>`;
+                    console.error('API call error:', error);
+                });
+            }
+            
+            // Gemini API 호출 함수
+            function callGeminiAPI(prompt, apiKey, model) {
+                loadingDiv.style.display = 'flex';
+                resultDiv.innerHTML = '';
+                
+                const apiUrl = apiUrlInput.value.trim() || 
+                    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+                
+                fetch(`${apiUrl}?key=${apiKey}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        contents: [{
+                            parts: [{
+                                text: prompt
+                            }]
+                        }],
+                        generationConfig: {
+                            temperature: 0.2,
+                            topK: 40,
+                            topP: 0.95,
+                            maxOutputTokens: 8192
+                        }
+                    })
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`API 요청 실패: ${response.status} ${response.statusText}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    loadingDiv.style.display = 'none';
+                    
+                    if (data.candidates && data.candidates.length > 0 && 
+                        data.candidates[0].content && data.candidates[0].content.parts) {
+                        const result = data.candidates[0].content.parts[0].text;
+                        resultDiv.innerHTML = `<pre>${result}</pre>`;
+                    } else {
+                        resultDiv.innerHTML = '<p>응답을 처리하는 중 오류가 발생했습니다.</p>';
+                        console.error('Unexpected API response structure:', data);
+                    }
+                })
+                .catch(error => {
+                    loadingDiv.style.display = 'none';
+                    resultDiv.innerHTML = `<p>오류가 발생했습니다: ${error.message}</p>`;
+                    console.error('API call error:', error);
+                });
+            }
+        });
+    </script>
+</body>
+</html>
